@@ -1,0 +1,74 @@
+# After using Publish or Perish to export Microsoft Academic Searches for the topics
+# of interest, code below assigns countries by journals, and when no match is found on
+# language
+
+# Topics by Country Microsoft Academic Searches
+
+library(readxl)
+library(dplyr)
+library(writexl)
+
+# read in list of journals
+scimagojr_journals <- read_excel("//dos01awpdicxc01.gec.aip/ctxhome/BoatnerJS/My Documents/scimagojr journals.xlsx")
+
+# data topics
+
+setwd("//dos01awpdicxc01.gec.aip/ctxhome/BoatnerJS/My Documents")
+
+files <- list.files(path = "//dos01awpdicxc01.gec.aip/ctxhome/BoatnerJS/My Documents/research topics", 
+                    pattern = "*.xlsx", full.names = TRUE)
+
+tbl <- sapply(files, read_excel, simplify = FALSE) %>%
+  bind_rows(.id = "id")
+
+# drop all that don't have a source
+
+tbl <- tbl[!is.na(tbl$Source),]
+
+# merge with journals to get country affiliation
+
+research <- merge(tbl, scimagojr_journals, by.x = "Source", by.y = "Title", all.x = TRUE, all.y = FALSE)
+
+# Use Detected language froom google sheets to replace NAs where no country matched
+
+find_language <- research[is.na(research$Country),]
+
+# return the languages detected, make excel sheet that connects language code to countries
+table(find_language$Language)
+
+# read in map of language codes to country
+
+language_to_codes <- read_excel("//dos01awpdicxc01.gec.aip/ctxhome/BoatnerJS/My Documents/language to codes.xlsx")
+
+# merge countries to language
+
+merged_language <- merge(find_language, language_to_codes, by.x = "Language",
+                         by.y = "Code", all.x = TRUE, all.y = FALSE)
+
+merged_language$Country <- merged_language$`Assigned CountryRegion`
+
+# Has language
+
+has_language <- research[!is.na(research$Country),]
+
+# drop two extra columns, and reoreder
+merged_language <- subset(merged_language, select = -c(32:33))
+merged_language <- merged_language[c(2:28,1,29:31)]
+
+# combine them together
+final_data <- rbind(has_language, merged_language)
+
+# Only keep the data that mapped to one of the 26 countries of AI interest
+
+interest_list <- list("United Kingdom", "China", "India", "Ireland", "United States",
+                      "Germany", "Russia", "Brazil", "Japan", "Spain", "France", 
+                      "Israel", "Norway", "Belgium", "South Korea", "Italy", "Netherlands", 
+                      "Canada", "Switzerland", "Sweden", "Finland", "New Zealand", "Australia",
+                      "Singapore", "South Africa", "Denmark")
+
+clean_data <- final_data[final_data$Country %in% interest_list,]
+
+# write xlxs for Tableau, maintain characters in different language
+
+
+write_xlsx(clean_data, "research by country.xlsx")
